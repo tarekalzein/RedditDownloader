@@ -18,7 +18,6 @@ namespace RedditDownloader
         static void Main(string[] args)
         {
             string subreddit = "";
-            //string url = "https://api.pushshift.io/reddit/submission/search?subreddit={0}&limit=1000&sort=desc&before={1}&after={2}";
             do
             {
                 Console.WriteLine("Enter the subreddit to download");
@@ -90,14 +89,17 @@ namespace RedditDownloader
 
             //Code to merge posts and comments and save them in file
             List<RedditSubmission> submissionsWithComments = new List<RedditSubmission>(submissions);
-            Console.WriteLine(submissionsWithComments.Count());
             foreach(RedditComment comment in comments)
             {
                 RedditSubmission rs = submissionsWithComments.Where(x => x.ID.Equals(comment.ID)).SingleOrDefault();
-                Console.WriteLine(rs.ID);
+                if (rs != null)
+                {
+                    rs.Comments += comment.Body + " ";
+                }
             }
-            Console.WriteLine($"First Post: \n {submissionsWithComments[0].ID} | {submissionsWithComments[0].Title} \n comments: {submissionsWithComments[0].Comments}");
+            //Console.WriteLine($"First Post: \n {submissionsWithComments[0].ID} | {submissionsWithComments[0].Title} \n comments: {submissionsWithComments[0].Comments}");
 
+            SaveSubmissionsToCSV(submissionsWithComments, "submissionsWithComments.csv");
         }
 
         private void SaveSubmissionsToCSV(List<RedditSubmission> submissions,string fileName)
