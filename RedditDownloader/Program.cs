@@ -17,32 +17,77 @@ namespace RedditDownloader
     {
         static void Main(string[] args)
         {
-            string subreddit = "";
+            string[] subreddits;
+            DateTime endDateTime;
+            DateTime startDateTime;
+            
+
             do
             {
-                Console.WriteLine("Enter the subreddit to download");
-                var temp = Console.ReadLine();
+                Console.WriteLine("Enter the subreddits to download, use the following format: subreddit1,subreddit2,subreddit3");
+                var temp = Console.ReadLine();                
                 if (!String.IsNullOrWhiteSpace(temp))
                 {
-                    subreddit = temp;
+                    temp = temp.Replace(" ", "");
+                    subreddits = temp.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);                    
                     break;
+                }
+                else
+                {
+                    Console.WriteLine("Please enter a valid subreddit/multiple subreddits");
                 }
             }
             while (true);
-            Request r = new Request(subreddit, new DateTime(2021,4,13), DateTime.Now );
-            r.GetAllData();
 
-            //do
-            //{
-            //    Console.WriteLine("Enter the start date ");
-            //    var temp = Console.ReadLine();
-            //    if (!String.IsNullOrWhiteSpace(temp))
-            //    {
-            //        subreddit = temp;
-            //        break;
-            //    }
-            //}
-            //while (true);
+            do
+            {
+                Console.WriteLine("Enter the start date (Date to start scraping for data), Leave empty to fetch all data without date time limit");
+                var temp = Console.ReadLine();
+                if (String.IsNullOrWhiteSpace(temp))
+                {
+                    startDateTime = new DateTime(1990, 01, 01);//no reddit by that time.
+                    break;
+                }
+                if (!String.IsNullOrWhiteSpace(temp))
+                {
+                    if(DateTime.TryParse(temp, out startDateTime))
+                        break;
+                    else
+                        Console.WriteLine("Please enter a valid start date");
+                }
+            }
+            while (true);
+
+            do
+            {
+                Console.WriteLine("Enter the end date (Date to stop data scraping), Leave empty set end date and time to {Now}");
+                var temp = Console.ReadLine();
+                if (String.IsNullOrWhiteSpace(temp))
+                {
+                    endDateTime = DateTime.Now;
+                    break;
+                }
+                else if (!String.IsNullOrWhiteSpace(temp))
+                {
+                    if (DateTime.TryParse(temp, out endDateTime))
+                        break;
+                    else
+                        Console.WriteLine("Please enter a valid end date");
+                }
+            }
+            while (true);
+
+            Console.WriteLine($"\n" +
+                $"Searching for submissions between {startDateTime.ToString("d")} and {endDateTime.ToString("d")} from the following subreddit(s):");
+            foreach (string s in subreddits)
+            {
+                Console.WriteLine($"<{s}>");
+            }
+            Console.WriteLine(Environment.NewLine);
+
+
+            Request r = new Request(subreddits, startDateTime, endDateTime);
+            r.GetAllData();            
         }        
     }
 
@@ -60,32 +105,45 @@ namespace RedditDownloader
             HasHeaderRecord = true,
         };
 
-        public string Subreddit { get;  }
+        public string[] Subreddits { get;  }
         public  DateTime StartDateTime { get;  }
         public DateTime EndDateTime { get; }
 
-        public Request(string subreddit, DateTime startDateTime, DateTime endDateTime)
+        public Request(string[] subreddits, DateTime startDateTime, DateTime endDateTime)
         {
-            Subreddit = subreddit;
+            Subreddits = subreddits;
             StartDateTime = startDateTime;
             EndDateTime = endDateTime;
         }
 
         public void GetAllData()
         {
-            var submissionsTask = Task.Run(() => GetSubmissions());
-            var commentsTask = Task.Run(() => GetComments());
+            List<RedditSubmission> submissions = new List<RedditSubmission>();
+            List<RedditComment> comments = new List<RedditComment>();
 
-            Task.WaitAll(submissionsTask, commentsTask);
+            foreach (string subreddit in Subreddits)
+            {
+                Console.WriteLine($"Fetching Submissions From {subreddit}");
+                var submissionsTask = Task.Run(() => GetSubmissions(subreddit));
 
-            List<RedditSubmission> submissions = submissionsTask.Result;
-            List<RedditComment> comments = commentsTask.Result;
+                Console.WriteLine($"Fetching Comments From {subreddit}");
+                var commentsTask = Task.Run(() => GetComments(subreddit));
+
+                Task.WaitAll(submissionsTask, commentsTask);
+
+                if (submissionsTask.Result.Count > 0)
+                    submissions.AddRange(submissionsTask.Result);
+
+                if (commentsTask.Result.Count > 0)
+                    comments.AddRange(commentsTask.Result);
+            }
+
 
             SaveSubmissionsToCSV(submissions, "submissions.csv");
-            Console.WriteLine("Submissions were save to submissions.csv");
+            Console.WriteLine($"{submissions.Count} submissions are saved to submissions.csv");
 
             SaveCommentsToCSV(comments);
-            Console.WriteLine("Comments were save to comments.csv");
+            Console.WriteLine($"{comments.Count} Comments are saved to comments.csv");
 
             //Code to merge posts and comments and save them in file
             List<RedditSubmission> submissionsWithComments = new List<RedditSubmission>(submissions);
@@ -97,9 +155,9 @@ namespace RedditDownloader
                     rs.Comments += comment.Body + " ";
                 }
             }
-            //Console.WriteLine($"First Post: \n {submissionsWithComments[0].ID} | {submissionsWithComments[0].Title} \n comments: {submissionsWithComments[0].Comments}");
-
             SaveSubmissionsToCSV(submissionsWithComments, "submissionsWithComments.csv");
+            Console.WriteLine($"{submissionsWithComments.Count} submissions with their comments are merged and saved to submissionsWithComments.csv");
+
         }
 
         private void SaveSubmissionsToCSV(List<RedditSubmission> submissions,string fileName)
@@ -138,7 +196,7 @@ namespace RedditDownloader
             }
         }
 
-        private List<RedditSubmission> GetSubmissions()
+        private List<RedditSubmission> GetSubmissions(string subreddit)
         {
             int count = 0;
 
@@ -154,7 +212,7 @@ namespace RedditDownloader
                 string new_url = string.Format(
                     BASE_URL,
                     "submission",
-                    Subreddit,
+                    subreddit,
                     endDateTimeUnix,
                     startDateTimeUnix
                     );
@@ -192,7 +250,7 @@ namespace RedditDownloader
             return submissions;
         }       
 
-        private List<RedditComment> GetComments()
+        private List<RedditComment> GetComments(string subreddit)
         {
             int count = 0;
 
@@ -208,7 +266,7 @@ namespace RedditDownloader
                     string new_url = string.Format(
                         BASE_URL,
                         "comment",
-                        Subreddit,
+                        subreddit,
                         endDateTimeUnix,
                         startDateTimeUnix
                         );
