@@ -89,9 +89,19 @@ namespace RedditDownloader
             summary.ForEach(x => Console.WriteLine(x));
 
             Console.WriteLine("\n");
-            Console.WriteLine("Error List:");
-            errorList.ForEach(x => Console.WriteLine(x));
+            Console.WriteLine($"Number of errors: {errorList.Count}. Please check errorList.txt for errors");
 
+            using (TextWriter tw = new StreamWriter(filePath+"errorList.txt"))
+            {
+                foreach (String s in errorList)
+                    try
+                    {
+                        tw.WriteLine(s);
+                    }catch (IOException e)
+                    {
+                        Console.WriteLine("Couldn't print error list. Reason: "+ e.Message);
+                    }
+            }
         }
 
         private void SaveSubmissionsToCSV(List<RedditSubmission> submissions, string fileName)
@@ -104,8 +114,8 @@ namespace RedditDownloader
                 csvWriter.NextRecord();
                 foreach (RedditSubmission submission in submissions)
                 {
-                    submission.Title = submission.Title.Replace("\n", " ").Replace(";", "");
-                    submission.SelfText = submission.SelfText.Replace("\n", " ").Replace(";", "");
+                    submission.Title = submission.Title.Replace("\n", " ").Replace(";", " ").Replace("|", " ");
+                    submission.SelfText = submission.SelfText.Replace("\n", " ").Replace(";", " ").Replace("|", " ");
                 }
                 try
                 {
@@ -132,7 +142,7 @@ namespace RedditDownloader
                 csvWriter.NextRecord();
                 foreach (RedditComment comment in comments)
                 {
-                    comment.Body = comment.Body.Replace("\n", " ").Replace(";", "");
+                    comment.Body = comment.Body.Replace("\n", " ").Replace(";", " ").Replace("|", " ");
                 }
                 csvWriter.WriteRecords(comments);
                 writer.Flush();
@@ -162,7 +172,7 @@ namespace RedditDownloader
                     try
                     {
                         string json = wc.DownloadString(new_url);
-                        Thread.Sleep(1000);
+                        Thread.Sleep(2000);
                         JObject data = JObject.Parse(json);
 
                         JToken token = data["data"];
@@ -176,7 +186,10 @@ namespace RedditDownloader
                         {
                             count += 1;
                             endDateTimeUnix = (long)item["created_utc"] - 1;
-                            submissions.Add(
+                            //check for removed submissions:
+                            if (!((string) item["selftext"]).Contains("[removed]") && !((string)item["selftext"]).Contains("[deleted]"))
+                            {
+                                submissions.Add(
                                 new RedditSubmission
                                 {
                                     ID = (string)item["id"],
@@ -186,8 +199,9 @@ namespace RedditDownloader
                                     DateTimeCreatedUTC = (long)item["created_utc"],
                                     URL = (string)item["url"]
                                 });
+                            }                            
                         }
-                        Console.WriteLine($"Saved {count} submissions from {subreddit} through {FromUnixTime(endDateTimeUnix).Date}");
+                        Console.WriteLine($"Saved {count} submissions from {subreddit} through {FromUnixTime(endDateTimeUnix).Date.ToString("yyyy/MM/dd")}");
                     }
                     catch (Exception e)
                     {
@@ -198,7 +212,7 @@ namespace RedditDownloader
                 }
             }
             summary.Add($"{count} submissions fetched from {subreddit}");
-            Console.WriteLine($"No of submissions fetched from {subreddit} is {count}");
+            Console.WriteLine($"No. of submissions fetched from {subreddit} is {count}");
             return submissions;
         }
 
@@ -226,7 +240,7 @@ namespace RedditDownloader
                     try
                     {
                         string json = wc.DownloadString(new_url);
-                        Thread.Sleep(1000);
+                        Thread.Sleep(2000);
                         JObject data = JObject.Parse(json);
 
                         JToken token = data["data"];
@@ -244,7 +258,9 @@ namespace RedditDownloader
                             var id_temp = (string)item["link_id"];
                             var id = id_temp.Split('_').Last();
 
-                            comments.Add(
+                            if (!((string)item["body"]).Contains("[removed]") && !((string)item["body"]).Contains("[deleted]"))
+                            {
+                                comments.Add(
                                 new RedditComment
                                 {
                                     Body = (string)item["body"],
@@ -253,6 +269,8 @@ namespace RedditDownloader
                                     DateTimeCreatedUTC = (long)item["created_utc"],
                                     URL = (string)item["url"]
                                 });
+                            }
+                            
                         }
                     }
                     catch (Exception e)
@@ -263,7 +281,7 @@ namespace RedditDownloader
                     Console.WriteLine($"Saved {count} comments from {subreddit} through {FromUnixTime(endDateTimeUnix).Date}");
                 }
             }
-            Console.WriteLine($"No of comments fetched from {subreddit} is {count}");
+            Console.WriteLine($"No. of comments fetched from {subreddit} is {count}");
             summary.Add($"{count} comments fetched from {subreddit}");
             return comments;
         }
